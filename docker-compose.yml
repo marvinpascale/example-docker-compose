@@ -5,18 +5,17 @@ services:
   #the html can be found in ./app/
   app:
     image: httpd:alpine
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./app/:/usr/local/apache2/htdocs/
     networks:
-      crowdsec_test:
-        ipv4_address: 172.20.0.2
+      - crowdsec_test
 
   #the reverse proxy that will serve the application
   #you can see nginx's config in ./reverse-proxy/nginx.conf
   reverse-proxy:
     image: nginx:alpine
-    restart: always
+    restart: unless-stopped
     ports:
       - 8000:80
     depends_on:
@@ -25,14 +24,13 @@ services:
       - ./reverse-proxy/nginx.conf:/etc/nginx/nginx.conf
       - logs:/var/log/nginx
     networks:
-      crowdsec_test:
-        ipv4_address: 172.20.0.3
-  
+      - crowdsec_test
+
   #crowdsec : it will be fed nginx's logs
   #and later we're going to plug a firewall bouncer to it
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.2.0
-    restart: always
+    image: crowdsecurity/crowdsec:latest
+    restart: unless-stopped
     environment:
       #this is the list of collections we want to install
       #https://hub.crowdsec.net/author/crowdsecurity/collections/nginx
@@ -40,20 +38,21 @@ services:
       GID: "${GID-1000}"
     depends_on:
       - 'reverse-proxy'
+    ports:
+      - 127.0.0.1:8080:8080
     volumes:
       - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml
       - logs:/var/log/nginx
       - crowdsec-db:/var/lib/crowdsec/data/
       - crowdsec-config:/etc/crowdsec/
     networks:
-      crowdsec_test:
-        ipv4_address: 172.20.0.4
-  
+      - crowdsec_test
+
   #metabase, because security is cool, but dashboards are cooler
   dashboard:
     #we're using a custom Dockerfile so that metabase pops with pre-configured dashboards
     build: ./crowdsec/dashboard
-    restart: always
+    restart: unless-stopped
     ports:
       - 3000:3000
     environment:
@@ -64,8 +63,7 @@ services:
     volumes:
       - crowdsec-db:/metabase-data/
     networks:
-      crowdsec_test:
-        ipv4_address: 172.20.0.5
+      - crowdsec_test
 
 volumes:
   logs:
@@ -74,7 +72,3 @@ volumes:
 
 networks:
   crowdsec_test:
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.20.0.0/24
